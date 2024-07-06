@@ -1,0 +1,155 @@
+from google.colab import drive
+drive.mount('/content/drive')
+!pip install scipy
+!pip install statsmodels
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import scipy.stats as stats
+import math
+from scipy import signal
+from astropy.io import fits
+from scipy.optimize import curve_fit
+from scipy import asarray as ar,exp
+GRB09042615150 = '/content/drive/MyDrive/grbstesis/curvas/tesis/GRB090426/256-15-150.lc'
+GRB09042650150 = '/content/drive/MyDrive/grbstesis/curvas/tesis/GRB090426/256-50-150.lc'
+GRB0904261550 = '/content/drive/MyDrive/grbstesis/curvas/tesis/GRB090426/256-15-50.lc'
+GRB120804A15150 = '/content/drive/MyDrive/grbstesis/curvas/tesis/GRB120804A/256-15-150.lc'
+GRB120804A50150 = '/content/drive/MyDrive/grbstesis/curvas/tesis/GRB120804A/256-50-150.lc'
+GRB120804A1550 = '/content/drive/MyDrive/grbstesis/curvas/tesis/GRB120804A/256-15-50.lc'
+def plot_light_curve(filename,tstart,tstop,trigtime):
+   with fits.open(filename) as hdul:
+      information = hdul[1].data
+      header1 = hdul[1].header
+      T_0=header1['TRIGTIME']
+      time=information['TIME']
+      rate=information['RATE']
+      rate_err=information['ERROR']
+      time=time-T_0
+
+      #time=time-(T_0-0.1*T90)
+
+   #creamos nuevos arreglos
+   trigtime=T_0
+   tiempo=[]
+   rateaux=[]
+   rateaux_err=[]
+   for i in range(0,len(time)):
+     if(time[i]>=tstart and time[i]<=tstop):
+        tiempo.append(time[i])
+        rateaux.append(rate[i])
+        rateaux_err.append(rate_err[i])
+   return tiempo,rateaux,rateaux_err,trigtime
+
+import statistics
+
+def t90ca(time, rate, rate_err,t_5,t_95,t90,tlcut,tpcut):
+    sum_rate = 0.0
+    aux=0
+    cum = []
+    t = []
+    c = []
+    e = []
+    errort_90 = 0
+    t_95n=0
+    t_5n=0
+    for i in range(len(time)):
+      if (time[i]<0.1 and time[i]>-0.1):
+        aux=i
+        print(i)
+    for i in range(38,78):
+        if rate[i] > 0:
+            sum_rate += rate[i-4]
+            cum.append(sum_rate)
+            t.append(time[i-4])
+            c.append(rate[i-4])
+            e.append(rate_err[i-4])
+        elif rate[i] < 0 and time[i] <= 0:
+            cum.append(sum_rate)
+            t.append(time[i-4])
+            c.append(0)
+            e.append(rate_err[i-4])
+        else:
+            break
+
+    for i in range(len(cum) - 1):
+        q_5 = np.max(cum) * 0.05
+        q_95 = np.max(cum) * 0.95
+        if cum[i] <= q_5 < cum[i + 1]:
+            t_5 = i
+        if cum[i] <= q_95 < cum[i + 1]:
+            t_95 = i
+
+    errort_90 = (time[t_5 + 1] - time[t_5]) ** 2 + (time[t_95] - time[t_95 - 1]) ** 2
+    t_95n= (time[int(t_95)] + time[int(t_95+1)])/2
+    t_5n= (time[int(t_5)] + time[int(t_5+1)])/2
+    print("T90 =",t_95n - t_5n, '+/-', np.sqrt(errort_90))
+    t90=t_95n - t_5n
+    t_95=t_95n
+    t_5=t_5n
+    t90 = round(t90, 4)
+    print(t90)
+    return t_5,t_95,t90
+
+low=-10
+top=15
+trigtime1=0
+time,rate,rate_err,trigtime1=plot_light_curve(GRB0904261550,low,top,trigtime1)
+time2,rate2,rate_err2,trigtime2=plot_light_curve(GRB09042615150,low,top,trigtime1)
+time3,rate3,rate_err3,trigtime3=plot_light_curve(GRB09042650150,low,top,trigtime1)
+
+figure, axis = plt.subplots(3, 1, sharex=True, figsize=(10, 6), gridspec_kw={'hspace': 0})
+t90=0
+t_5=0
+t_95=0
+capsize = 2
+dot_size = 4
+tlcut=0
+tucut=0
+
+t = t90ca(time, rate, rate_err, t_5, t_95,t90,tlcut,tucut)
+print(trigtime1)
+axis[0].step(time, rate , color='black', label='15-50 Kev '+'T90= '+str(t[2])+' s')
+axis[0].legend()
+axis[0].grid(True)
+
+t90=0
+t_5=0
+t_95=0
+tlcut=0
+tucut=0
+t=0
+
+t = t90ca(time2, rate2, rate_err2, t_5, t_95,t90,tlcut,tucut)
+print(rate)
+#axis[1].errorbar(time2, rate2, yerr=rate_err2, fmt='o', capsize=capsize, markersize=dot_size, color='black')
+axis[1].step(time2, rate2 , color='black', label='15-150 Kev '+'T90= '+str(t[2])+' s')
+#axis[1].axvline(x=t[0], color='black', alpha=1, linestyle='--', label=f'5% fluence')
+#axis[1].axvline(x=t[1], color='black', alpha=1, linestyle='--', label=f'95% fluence')
+axis[1].legend()
+axis[1].grid(True)
+
+t90=0
+t_5=0
+t_95=0
+tlcut=0
+tucut=0
+t=0
+t = t90ca(time3, rate3, rate_err3, t_5, t_95,t90,tlcut,tucut)
+
+axis[2].step(time3, rate3 , color='black', label='50-150 Kev '+'T90= '+str(t[2])+' s')
+axis[2].legend()
+axis[2].grid(True)
+
+figure.text(0.04, 0.5, 'Cuentas', va='center', rotation='vertical', fontsize=16, fontweight="bold")
+figure.text(0.45, 0.04, 'Tiempo [s]', va='center', rotation='horizontal', fontsize=16, fontweight="bold")
+figure.suptitle('GRB090426', fontsize=18, fontweight="bold", y=0.95)
+
+axis[0].yaxis.set_ticks(np.arange(-0.1, 0.31, 0.1))
+axis[1].yaxis.set_ticks(np.arange(-0.1, 0.45, 0.1))
+axis[2].yaxis.set_ticks(np.arange(-0.1, 0.2, 0.05))
+axis[0].set_ylim(-0.1, 0.31)
+axis[1].set_ylim(-0.1, 0.47)
+axis[2].set_ylim(-0.1, 0.19)
+
+plt.show()
