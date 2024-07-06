@@ -1,0 +1,130 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from astropy.io import fits
+from scipy.optimize import curve_fit
+from google.colab import drive
+drive.mount('/content/drive')
+!pip install scipy
+!pip install statsmodels
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import scipy.stats as stats
+import math
+from scipy import signal
+from astropy.io import fits
+from scipy.optimize import curve_fit
+from scipy import asarray as ar,exp
+
+GRB09042615150 = '/content/drive/MyDrive/grbstesis/curvas/tesis/GRB090426/256-15-150.lc'
+GRB09042650150 = '/content/drive/MyDrive/grbstesis/curvas/tesis/GRB090426/256-50-150.lc'
+GRB0904261550 = '/content/drive/MyDrive/grbstesis/curvas/tesis/GRB090426/256-15-50.lc'
+GRB120804A15150 = '/content/drive/MyDrive/grbstesis/curvas/tesis/GRB120804A/256-15-150.lc'
+GRB120804A50150 = '/content/drive/MyDrive/grbstesis/curvas/tesis/GRB120804A/256-50-150.lc'
+GRB120804A1550 = '/content/drive/MyDrive/grbstesis/curvas/tesis/GRB120804A/256-15-50.lc'
+
+def plot_light_curve(filename, tstart, tstop):
+    with fits.open(filename) as hdul:
+        information = hdul[1].data
+        header1 = hdul[1].header
+        T_0 = header1['TRIGTIME']
+        time = information['TIME']
+        rate = information['RATE']
+        rate_err = information['ERROR']
+        time = time - T_0
+
+    tiempo = []
+    rateaux = []
+    rateaux_err = []
+    for i in range(len(time)):
+        if tstart <= time[i] <= tstop:
+            tiempo.append(time[i])
+            rateaux.append(rate[i])
+            rateaux_err.append(rate_err[i])
+    return np.array(tiempo), np.array(rateaux), np.array(rateaux_err), T_0
+
+def t90ca(time, rate, rate_err):
+    sum_rate = 0.0
+    cum = []
+    for i in range(len(rate)):
+        sum_rate += rate[i]
+        cum.append(sum_rate)
+
+    q_5 = 0.05 * max(cum)
+    q_95 = 0.95 * max(cum)
+
+    t_5 = next(time[i] for i in range(len(cum)) if cum[i] >= q_5)
+    t_95 = next(time[i] for i in range(len(cum)) if cum[i] >= q_95)
+
+    t90 = t_95 - t_5
+    errort_90 = np.sqrt((time[np.where(time == t_5)[0][0] + 1] - t_5) ** 2 + (t_95 - time[np.where(time == t_95)[0][0] - 1]) ** 2)
+
+    return t_5, t_95, t90, errort_90
+
+tstart = -1.5  # Define start time
+tstop = 1.5  # Define stop time
+
+filename1 = '/content/drive/MyDrive/grbstesis/curvas/tesis/GRB120804A/256-50-150.lc'
+filename2 = '/content/drive/MyDrive/grbstesis/curvas/tesis/GRB120804A/256-15-50.lc'
+
+time1, rate1, rate_err1, trigtime1 = plot_light_curve(filename1, tstart, tstop)
+time2, rate2, rate_err2, trigtime2 = plot_light_curve(filename2, tstart, tstop)
+
+def dcf(x, y, binsize):
+    n = len(x)
+    mean_x = np.mean(x)
+    mean_y = np.mean(y)
+    dcf_values = []
+    tau = []
+
+    for k in range(-n + 1, n):
+        ccf = 0
+        for i in range(n):
+            j = i + k
+            if 0 <= j < n:
+                ccf += (x[i] - mean_x) * (y[j] - mean_y)
+        ccf /= (n - abs(k))
+        dcf_values.append(ccf)
+        tau.append(k * binsize)
+
+    return np.array(tau), np.array(dcf_values)
+
+binsize = 0.1  # Define the binsize for DCF
+tau, dcf_values = dcf(rate1, rate2, binsize)
+
+def gaussian(x, amp, mean, sigma):
+    return amp * np.exp(-(x - mean)**2 / (2 * sigma**2))
+
+tau_central=[-0.1,0,0.1,0.2]
+dcf_values=[0.051551739868555456,0.09156846207791047,0.07433730759007723,0.026606114164342182]
+popt, pcov = curve_fit(gaussian, tau_central, dcf_values, p0=[1, 0, 0.5])
+
+tau_fine = np.linspace(min(tau_central), max(tau_central), 500)
+gaussian_fit = gaussian(tau_fine, *popt)
+
+plt.figure(figsize=(10, 6))
+
+plt.subplot(1, 2, 1)
+plt.plot(time1, rate1, 'black', linestyle='--', label='50-150 keV')
+plt.plot(time2, rate2, 'black', label='15-50 keV')
+plt.xlabel('Tiempo (s)',fontweight='bold')
+plt.ylabel('Cuentas',fontweight='bold')
+plt.title('Curva de luz',fontweight='bold')
+plt.grid(True)
+
+plt.legend()
+
+plt.subplot(1, 2, 2)
+plt.plot(tau_central, dcf_values, 'o',color='black', label='puntos del DCF')
+plt.plot(tau_fine, gaussian_fit, 'black', label=' Ajuste gaussiano')
+plt.xlabel('Lag (s)',fontweight='bold')
+plt.ylabel('CCF',fontweight='bold')
+plt.title('CCF con ajuste gausaiano',fontweight='bold')
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+print(f"Amplitude: {popt[0]}")
+print(f"Mean: {popt[1]}")
+print(f"Sigma: {popt[2]}")
