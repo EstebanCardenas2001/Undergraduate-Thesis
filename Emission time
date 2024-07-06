@@ -1,0 +1,97 @@
+from google.colab import drive
+drive.mount('/content/drive')
+!pip install scipy
+!pip install statsmodels
+import numpy as np
+import pandas as pd
+import scipy.stats as stats
+import math
+from scipy import signal
+from astropy.io import fits
+from scipy.optimize import curve_fit
+from scipy import asarray as ar,exp
+from scipy.integrate import simps
+import matplotlib.gridspec as gridspe
+GRB09042615150 = '/content/drive/MyDrive/grbstesis/curvas/tesis/GRB090426/256-15-150.lc'
+GRB09042650150 = '/content/drive/MyDrive/grbstesis/curvas/tesis/GRB090426/256-50-150.lc'
+GRB0904261550 = '/content/drive/MyDrive/grbstesis/curvas/tesis/GRB090426/256-15-50.lc'
+GRB120804A15150 = '/content/drive/MyDrive/grbstesis/curvas/tesis/GRB120804A/256-15-150.lc'
+GRB120804A50150 = '/content/drive/MyDrive/grbstesis/curvas/tesis/GRB120804A/256-50-150.lc'
+GRB120804A1550 = '/content/drive/MyDrive/grbstesis/curvas/tesis/GRB120804A/256-15-50.lc'
+c
+
+def plot_light_curve(filename, tstart, tstop, trigtime):
+    with fits.open(filename) as hdul:
+        information = hdul[1].data
+        header1 = hdul[1].header
+        T_0 = header1['TRIGTIME']
+        time = information['TIME']
+        rate = information['RATE']
+        rate_err = information['ERROR']
+        time = time - T_0
+
+    tiempo = []
+    rateaux = []
+    contador = 0
+    for i in range(len(time)):
+        if tstart <= time[i] <= tstop:
+            tiempo.append(time[i])
+            rateaux.append(rate[i])
+            contador += 1
+    sorted_indices = sorted(range(len(rateaux)), key=lambda k: rateaux[k], reverse=True)
+    sorted_rateaux = np.array([rateaux[i] for i in sorted_indices])
+
+    x_values = np.arange(len(sorted_rateaux)) * 0.256
+
+    integral_value = simps(sorted_rateaux, x_values)
+
+    cumulative_sum = 0
+    half_integral_rate = None
+    for i, rate_value in enumerate(sorted_rateaux):
+        cumulative_sum += rate_value * (x_values[i] - x_values[i-1] if i > 0 else 0)  # Approximate integral using trapezoidal rule
+        if cumulative_sum >= 0.5 * integral_value:
+            half_integral_rate = rate_value
+            break
+
+    start_time = None
+    stop_time = None
+    for i in range(contador):
+        if rateaux[i] >= half_integral_rate:
+            if start_time is None:
+                start_time = tiempo[i]
+            stop_time = tiempo[i]
+
+    time_difference = stop_time - start_time
+
+    fig = plt.figure(figsize=(10, 6))
+    gs = gridspec.GridSpec(1, 2, width_ratios=[1, 1], wspace=0)
+
+    ax0 = plt.subplot(gs[0])
+    ax0.plot(x_values, sorted_rateaux, color='black', label='Curva de luz reordenada de mayor a menor')
+    ax0.axhline(y=half_integral_rate, color='black', linestyle='--', label='Fluencia del 90%')
+    ax0.text(0, half_integral_rate, f'Cuenta: {half_integral_rate:.2f}', fontsize=10, va='bottom', ha='left', color='black')
+    ax0.set_ylabel('Cuentas')
+    ax0.set_title('Cuentas reorganizadas')
+    ax0.legend()
+    ax0.grid(True)
+    ax0.set_xlim([0, max(x_values)])
+
+    ax1 = plt.subplot(gs[1], sharey=ax0)
+    ax1.plot(tiempo, rateaux, color='black', alpha=1)
+    tiempoh = [tiempo[i] for i in range(contador) if rateaux[i] >= half_integral_rate]
+    rateauxh = [rateaux[i] for i in range(contador) if rateaux[i] >= half_integral_rate]
+    ax1.fill_between(tiempoh, rateauxh, 0, color='black', alpha=0.7)
+    ax1.axhline(y=half_integral_rate, color='black', linestyle='--')
+    ax1.set_title('Curva de luz')
+    ax1.grid(True)
+
+    ax1.tick_params(axis='y', which='both', left=False, labelleft=False)
+
+    fig.text(0.5, -0.01, 'Tiempo (s)', ha='center', va='center')
+    plt.tight_layout()
+    plt.show()
+
+    print(f'Time difference of the shadowed interval: {time_difference:.2f} seconds')
+
+    return sorted_rateaux, x_values
+sorted_rateaux, x_values = plot_light_curve(GRB09042615150, -10, 10, 0)
